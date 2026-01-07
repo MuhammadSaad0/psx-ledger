@@ -1,0 +1,5 @@
+{
+  "name": "PSX Portfolio Nexus",
+  "description": "A comprehensive AI-powered stock portfolio analyzer and advisor for the Pakistan Stock Exchange (PSX). Features portfolio tracking, investment strategy alignment, and market analysis using Gemini.",
+  "requestFramePermissions": []
+}
