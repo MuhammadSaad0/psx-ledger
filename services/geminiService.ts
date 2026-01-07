@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { StockPosition, InvestmentStrategy, AnalysisResult, SimulationResult } from "../types";
 
-const MODEL_NAME = "gemini-3-flash";
+const MODEL_NAME = "gemini-3-latest";
 
 // Helper to initialize Gemini
 const getAiClient = () => {
