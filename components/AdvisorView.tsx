@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { StockPosition, InvestmentStrategy, AnalysisResult, SimulationResult } from '../types';
-import { Pen, Stamp, RefreshCw, BarChart3, Target, ShieldAlert, TrendingUp, Coins, Loader, History, Globe, ExternalLink, Calculator, ArrowRight, Share2, Activity, Layers, GitMerge, AlertOctagon, FlaskConical, Plus, ArrowUp, ArrowDown, Minus, Briefcase, Wallet } from 'lucide-react';
+import { Pen, Stamp, RefreshCw, BarChart3, Target, ShieldAlert, TrendingUp, Coins, Loader, History, Globe, ExternalLink, Calculator, ArrowRight, Share2, Activity, Layers, GitMerge, AlertOctagon, FlaskConical, Plus, ArrowUp, ArrowDown, Minus, Briefcase, Wallet, Scale } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ReferenceLine, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ComposedChart, Line, Area, Legend, AreaChart } from 'recharts';
 import { simulatePortfolioAddition } from '../services/geminiService';
 
@@ -33,6 +33,7 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({
   
   // Allow string to handle empty input state gracefully
   const [monthlyContribution, setMonthlyContribution] = useState<string | number>(50000);
+  const [rebalanceInflow, setRebalanceInflow] = useState<string | number>(100000);
   const [riskTab, setRiskTab] = useState<'network' | 'drawdown' | 'factors' | 'attribution' | 'tail'>('network');
 
   // Simulation State
@@ -112,6 +113,60 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({
         setIsSimulating(false);
     }
   }
+
+  // --- REBALANCING LOGIC ---
+  const rebalancingData = useMemo(() => {
+    if (!analysis?.idealAllocation || !portfolio) return null;
+    
+    const inflow = typeof rebalanceInflow === 'string' ? Number(rebalanceInflow) || 0 : rebalanceInflow;
+    
+    // Calculate current market value for each stock
+    const stockDetails = portfolio.map(stock => {
+        const price = stock.currentPrice || stock.avgBuyPrice;
+        const value = price * stock.shares;
+        return { ...stock, value, price };
+    });
+    
+    const totalCurrentValue = stockDetails.reduce((acc, s) => acc + s.value, 0);
+    const newTotalValue = totalCurrentValue + inflow;
+
+    // Calculate deficits
+    const projections = stockDetails.map(stock => {
+        const ideal = analysis.idealAllocation?.find(i => i.symbol === stock.symbol);
+        const idealWeight = ideal ? ideal.idealWeight / 100 : 0;
+        const targetValue = newTotalValue * idealWeight;
+        const deficit = Math.max(0, targetValue - stock.value);
+        const currentWeight = totalCurrentValue > 0 ? (stock.value / totalCurrentValue) * 100 : 0;
+        
+        return {
+            symbol: stock.symbol,
+            currentWeight,
+            idealWeight: idealWeight * 100,
+            deficit,
+            price: stock.price,
+            reason: ideal?.reason || ''
+        };
+    });
+    
+    const totalDeficit = projections.reduce((acc, p) => acc + p.deficit, 0);
+    
+    // Distribute inflow proportional to deficit
+    const suggestions = projections.map(p => {
+        let allocateAmount = 0;
+        if (totalDeficit > 0) {
+            allocateAmount = inflow * (p.deficit / totalDeficit);
+        }
+        return {
+            ...p,
+            allocateAmount,
+            buyShares: p.price > 0 ? Math.floor(allocateAmount / p.price) : 0
+        };
+    }).sort((a, b) => b.idealWeight - a.idealWeight);
+
+    return suggestions;
+
+  }, [analysis, portfolio, rebalanceInflow]);
+
 
   // --- DCA SIMULATION LOGIC ---
   const dcaProjection = useMemo(() => {
@@ -502,6 +557,84 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({
                     )}
                 </div>
 
+                {/* SMART REBALANCING SECTION */}
+                {rebalancingData && (
+                    <div className="mt-8 bg-sky-50 dark:bg-slate-700/50 border border-sky-200 dark:border-sky-800 rounded-sm p-6 relative">
+                        <div className="absolute -top-3 left-6 bg-sky-600 text-white px-3 py-1 text-xs font-bold uppercase tracking-widest flex items-center gap-2 shadow-sm">
+                            <Scale className="w-4 h-4" /> Smart Rebalancing
+                        </div>
+
+                        <div className="mt-4 flex flex-col gap-6">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-sky-100 dark:border-sky-900/50 pb-4">
+                                <p className="text-sm font-serif text-slate-600 dark:text-slate-300 max-w-lg">
+                                    "Based on the ideal portfolio structure designed by the AI, here is how you should distribute your next cash inflow to align with your strategy."
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-bold text-sky-800 dark:text-sky-300 uppercase whitespace-nowrap">Next Inflow (PKR)</label>
+                                    <input 
+                                        type="number" 
+                                        value={rebalanceInflow}
+                                        onChange={(e) => setRebalanceInflow(e.target.value)}
+                                        className="w-32 p-2 font-bold text-sky-900 dark:text-sky-100 bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-600 rounded-sm focus:outline-none focus:ring-2 focus:ring-sky-400 text-right"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500 border-b border-slate-200 dark:border-slate-600">
+                                            <th className="pb-2">Stock</th>
+                                            <th className="pb-2">Current %</th>
+                                            <th className="pb-2">Ideal %</th>
+                                            <th className="pb-2 text-right">Buy Amount (PKR)</th>
+                                            <th className="pb-2 text-right">Est. Shares</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                        {rebalancingData.map((item) => (
+                                            <tr key={item.symbol} className="group hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                                                <td className="py-3 pr-4">
+                                                    <div className="font-bold text-slate-800 dark:text-white">{item.symbol}</div>
+                                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-serif max-w-[150px] truncate">{item.reason}</div>
+                                                </td>
+                                                <td className="py-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-mono text-slate-600 dark:text-slate-300">{item.currentWeight.toFixed(1)}%</span>
+                                                        <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-slate-500 dark:bg-slate-400" style={{ width: `${Math.min(100, item.currentWeight)}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="py-3">
+                                                     <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-mono text-sky-700 dark:text-sky-400 font-bold">{item.idealWeight.toFixed(1)}%</span>
+                                                        <div className="w-16 h-1.5 bg-sky-100 dark:bg-slate-600 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-sky-500 dark:bg-sky-400" style={{ width: `${Math.min(100, item.idealWeight)}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 text-right">
+                                                    {item.allocateAmount > 0 ? (
+                                                        <span className="text-emerald-600 dark:text-emerald-400 font-bold font-mono">
+                                                            + {item.allocateAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-300 dark:text-slate-600">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="py-3 text-right font-mono text-slate-600 dark:text-slate-400">
+                                                    {item.buyShares > 0 ? item.buyShares : '-'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Cash Deployment Plays */}
                 {analysis.recommendedBuys && analysis.recommendedBuys.length > 0 && (
                     <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 p-6 rounded-sm animate-fade-in relative overflow-hidden">
@@ -703,6 +836,11 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({
                                 </ResponsiveContainer>
                             </div>
                             <p className="text-xs text-slate-400 dark:text-slate-500 font-serif italic mt-1 text-center">Projected Value of Total Net Worth</p>
+                            {analysis.projectionNarrative && (
+                                <p className="text-sm font-serif text-slate-600 dark:text-slate-300 mt-3 px-4 border-l-2 border-indigo-200 dark:border-indigo-800 italic">
+                                    "{analysis.projectionNarrative}"
+                                </p>
+                            )}
                         </div>
                     ) : (
                       loading && <div className="h-[300px] bg-slate-50 dark:bg-slate-700/50 animate-pulse rounded-sm border border-slate-100 dark:border-slate-600 flex items-center justify-center text-slate-300 font-serif italic">Projecting future growth...</div>
@@ -964,7 +1102,6 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({
                     </div>
                 )}
 
-            </div>
             </div>
         )}
     </div>

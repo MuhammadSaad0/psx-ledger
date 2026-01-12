@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { StockPosition, InvestmentStrategy, AnalysisResult, SimulationResult } from "../types";
 
-const MODEL_NAME = "gemini-2.5-flash-lite";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 // Helper to initialize Gemini
 const getAiClient = () => {
@@ -278,6 +278,15 @@ export const generatePortfolioAnalysis = async (
        - 'portfolioDecline' and 'marketDecline' MUST be negative numbers.
        - Example: Market -50%, Portfolio -45% (if defensive).
        - 'shockType' describes the nature (e.g., "Systemic Liquidity", "Demand Shock").
+       
+    9. **Ideal Portfolio Structure**:
+       - For the *currently held* stocks, assign an ideal percentage weight (0-100%) that aligns best with the user's strategy.
+       - The sum of these weights must equal 100%.
+       - Explain the reason for the weighting (e.g., "High dividend yield aligns with income goal").
+
+    10. **Growth Comparison Narrative**:
+       - Provide a concise explanation (field: 'projectionNarrative') comparing the Portfolio's projected path vs the Risk-Free Bank Savings (high interest rate environment in Pakistan) and the KSE-100 Market Benchmark.
+       - Explain WHY the portfolio outperforms or underperforms (e.g., "Conservative beta lags high bank rates" or "Aggressive growth potential beats inflation").
 
     CRITICAL FORMATTING:
     - All scores 0-100 must be Integers.
@@ -320,6 +329,7 @@ export const generatePortfolioAnalysis = async (
                 }
             }
         },
+        projectionNarrative: { type: Type.STRING },
         stockSentiments: {
             type: Type.ARRAY,
             items: {
@@ -419,6 +429,17 @@ export const generatePortfolioAnalysis = async (
               }
             }
           }
+        },
+        idealAllocation: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    symbol: { type: Type.STRING },
+                    idealWeight: { type: Type.NUMBER, description: "Percentage 0-100" },
+                    reason: { type: Type.STRING }
+                }
+            }
         }
     }
   };

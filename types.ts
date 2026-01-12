@@ -75,6 +75,7 @@ export interface AnalysisResult {
     marketAverage: number;
     savingsValue: number; // Comparison with bank savings
   }[];
+  projectionNarrative?: string;
   opportunities?: string[];
   threats?: string[];
   actionableMoves?: {
@@ -140,6 +141,11 @@ export interface AnalysisResult {
       shockType: string;
     }[];
   };
+  idealAllocation?: {
+    symbol: string;
+    idealWeight: number; // 0-100
+    reason: string;
+  }[];
   sources?: {
     title: string;
     uri: string;
