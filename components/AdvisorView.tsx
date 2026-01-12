@@ -1101,7 +1101,7 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({
                         </div>
                     </div>
                 )}
-
+            </div>
             </div>
         )}
     </div>
